@@ -1,13 +1,13 @@
 import logging
 import random
 import asyncio
-from pyrogram import Client, filters, enums
+import os
+from pyrogram import Client, filters, enums, idle
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from motor.motor_asyncio import AsyncIOMotorClient
+from aiohttp import web
 
-# --- CONFIGURATION (Ise Environment Variables se bharna best hai) ---
-import os
-
+# --- CONFIGURATION ---
 API_ID = int(os.environ.get("API_ID", "28186012")) # Apni API ID
 API_HASH = os.environ.get("API_HASH", "ecbdbf51d3c6cdcf9a39ac1e7b1d79b6")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8394919663:AAHZzRgdimPxn-O7PTnNAFgzqkhRoV0ZGiI")
@@ -16,6 +16,7 @@ CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003460038293")) # Force Sub Cha
 LOG_CHANNEL_ID = int(os.environ.get("LOG_CHANNEL_ID", "-1003602418876")) # Media Storage Channel
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "2145958203"))
 OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "MRPROFESSOR_00")
+PORT = int(os.environ.get("PORT", 8080)) # Render ye port dega
 
 # --- DATABASE SETUP ---
 mongo_client = AsyncIOMotorClient(MONGO_URL)
@@ -26,8 +27,19 @@ files_col = db["files"]
 # --- BOT SETUP ---
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# --- HELPER FUNCTIONS ---
+# --- WEB SERVER (RENDER KO KHUSH RAKHNE KE LIYE) ---
+routes = web.RouteTableDef()
 
+@routes.get("/", allow_head=True)
+async def root_route_handler(request):
+    return web.json_response("Bot is Running Smoothly!")
+
+async def web_server():
+    web_app = web.Application(client_max_size=30000000)
+    web_app.add_routes(routes)
+    return web_app
+
+# --- HELPER FUNCTIONS ---
 async def is_subscribed(user_id):
     try:
         member = await app.get_chat_member(CHANNEL_ID, user_id)
@@ -40,23 +52,14 @@ async def is_subscribed(user_id):
 async def add_user(user_id, referrer_id=None):
     user = await users_col.find_one({"user_id": user_id})
     if not user:
-        new_user = {
-            "user_id": user_id,
-            "points": 10, # Welcome Bonus
-            "referrals": 0,
-            "referrer": referrer_id
-        }
+        new_user = {"user_id": user_id, "points": 10, "referrals": 0, "referrer": referrer_id}
         await users_col.insert_one(new_user)
-        
-        # Referral Logic
         if referrer_id and referrer_id != user_id:
             referrer = await users_col.find_one({"user_id": referrer_id})
             if referrer:
                 await users_col.update_one({"user_id": referrer_id}, {"$inc": {"points": 20, "referrals": 1}})
-                try:
-                    await app.send_message(referrer_id, "🎉 New user joined via your link! +20 Points added.")
-                except:
-                    pass
+                try: await app.send_message(referrer_id, "🎉 New user joined! +20 Points added.")
+                except: pass
         return True
     return False
 
@@ -69,20 +72,17 @@ def main_menu():
     ])
 
 # --- HANDLERS ---
-
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
     user_id = message.from_user.id
     text = message.text.split()
     referrer_id = int(text[1]) if len(text) > 1 else None
     
-    # Check Force Sub
     if not await is_subscribed(user_id):
         join_btn = InlineKeyboardMarkup([[InlineKeyboardButton("📢 Join Channel First", url="https://t.me/YourChannelLink")]])
         await message.reply("⚠️ You must join our channel to use this bot!", reply_markup=join_btn)
         return
 
-    # Add User to DB
     await add_user(user_id, referrer_id)
     await message.reply("👋 Welcome to the Media Bot!", reply_markup=main_menu())
 
@@ -99,98 +99,77 @@ async def callback_handler(client, callback):
     
     if data == "balance":
         await callback.answer(f"💰 Your Points: {user['points']}", show_alert=True)
-        
     elif data == "profile":
-        txt = (f"👤 **User Profile**\n\n"
-               f"🆔 ID: `{user_id}`\n"
-               f"💰 Points: {user['points']}\n"
-               f"👥 Total Referrals: {user.get('referrals', 0)}")
+        txt = (f"👤 **User Profile**\n🆔 ID: `{user_id}`\n💰 Points: {user['points']}\n👥 Total Referrals: {user.get('referrals', 0)}")
         await callback.edit_message_text(txt, reply_markup=main_menu())
-
     elif data == "refer":
         link = f"https://t.me/{client.me.username}?start={user_id}"
-        await callback.edit_message_text(f"🔗 **Your Referral Link:**\n`{link}`\n\nShare this to earn 20 points per user!", reply_markup=main_menu())
-
+        await callback.edit_message_text(f"🔗 **Referral Link:**\n`{link}`\n\nShare to earn 20 points!", reply_markup=main_menu())
     elif data == "get_video":
-        cost = 5
-        if user['points'] >= cost:
-            # Fetch Random Video
+        if user['points'] >= 5:
             pipeline = [{"$match": {"type": "video"}}, {"$sample": {"size": 1}}]
             cursor = files_col.aggregate(pipeline)
             media = await cursor.to_list(length=1)
-            
             if media:
-                await users_col.update_one({"user_id": user_id}, {"$inc": {"points": -cost}})
-                await client.send_video(user_id, media[0]['file_id'], caption=f"✅ -{cost} Points")
-            else:
-                await callback.answer("❌ No videos found in DB!", show_alert=True)
-        else:
-            await callback.answer("❌ Low Balance! Refer friends.", show_alert=True)
-
+                await users_col.update_one({"user_id": user_id}, {"$inc": {"points": -5}})
+                await client.send_video(user_id, media[0]['file_id'], caption="✅ -5 Points")
+            else: await callback.answer("❌ No videos found!", show_alert=True)
+        else: await callback.answer("❌ Low Balance!", show_alert=True)
     elif data == "get_photo":
-        cost = 2
-        if user['points'] >= cost:
-             # Fetch Random Photo
+        if user['points'] >= 2:
             pipeline = [{"$match": {"type": "photo"}}, {"$sample": {"size": 1}}]
             cursor = files_col.aggregate(pipeline)
             media = await cursor.to_list(length=1)
-            
             if media:
-                await users_col.update_one({"user_id": user_id}, {"$inc": {"points": -cost}})
-                await client.send_photo(user_id, media[0]['file_id'], caption=f"✅ -{cost} Points")
-            else:
-                await callback.answer("❌ No photos found in DB!", show_alert=True)
-        else:
-            await callback.answer("❌ Low Balance! Refer friends.", show_alert=True)
+                await users_col.update_one({"user_id": user_id}, {"$inc": {"points": -2}})
+                await client.send_photo(user_id, media[0]['file_id'], caption="✅ -2 Points")
+            else: await callback.answer("❌ No photos found!", show_alert=True)
+        else: await callback.answer("❌ Low Balance!", show_alert=True)
 
-# --- AUTO INDEXING (Admin Channel) ---
 @app.on_message(filters.chat(LOG_CHANNEL_ID) & (filters.video | filters.photo))
 async def auto_index(client, message):
-    if message.video:
-        file_id = message.video.file_id
-        file_type = "video"
-    elif message.photo:
-        file_id = message.photo.file_id
-        file_type = "photo"
-    else:
-        return
-
-    # Save to DB
-    existing = await files_col.find_one({"file_id": file_id})
-    if not existing:
+    file_type = "video" if message.video else "photo"
+    file_id = message.video.file_id if message.video else message.photo.file_id
+    if not await files_col.find_one({"file_id": file_id}):
         await files_col.insert_one({"file_id": file_id, "type": file_type})
-        # Optional: React to confirm saving
         try: await message.react(emoji="🔥")
         except: pass
 
-# --- ADMIN COMMANDS ---
 @app.on_message(filters.command("stats") & filters.user(ADMIN_ID))
 async def stats(client, message):
-    users = await users_col.count_documents({})
-    files = await files_col.count_documents({})
-    await message.reply(f"📊 **Stats:**\nUsers: {users}\nFiles: {files}")
+    u = await users_col.count_documents({})
+    f = await files_col.count_documents({})
+    await message.reply(f"📊 Users: {u}\nFiles: {f}")
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_ID))
 async def add_points(client, message):
     try:
         _, uid, pts = message.text.split()
         await users_col.update_one({"user_id": int(uid)}, {"$inc": {"points": int(pts)}})
-        await message.reply(f"✅ Added {pts} points to {uid}")
-    except:
-        await message.reply("Usage: /add <user_id> <amount>")
+        await message.reply("✅ Done")
+    except: pass
 
 @app.on_message(filters.command("broadcast") & filters.user(ADMIN_ID) & filters.reply)
 async def broadcast(client, message):
-    all_users = users_col.find({})
-    success = 0
-    async for user in all_users:
-        try:
-            await message.reply_to_message.copy(user['user_id'])
-            success += 1
-            await asyncio.sleep(0.1) # Floodwait protection
-        except:
-            pass
-    await message.reply(f"📢 Broadcast Complete. Sent to {success} users.")
+    async for user in users_col.find({}):
+        try: await message.reply_to_message.copy(user['user_id'])
+        except: pass
+    await message.reply("📢 Sent.")
 
-print("Bot Started...")
-app.run()
+# --- STARTUP LOGIC (Modified for Render) ---
+if __name__ == "__main__":
+    print("Starting Bot...")
+    app.start() # Start the bot client
+    print("Bot Started!")
+    
+    # Start the Dummy Web Server
+    app_runner = web.AppRunner(await web_server())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(app_runner.setup())
+    site = web.TCPSite(app_runner, "0.0.0.0", PORT)
+    loop.run_until_complete(site.start())
+    print(f"Web Server running on port {PORT}")
+
+    # Keep the bot running
+    idle()
+    app.stop()
