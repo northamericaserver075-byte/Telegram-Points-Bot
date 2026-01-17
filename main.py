@@ -12,14 +12,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-API_ID = int(os.environ.get("API_ID", "123456")) 
-API_HASH = os.environ.get("API_HASH", "your_hash")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "your_token")
-MONGO_URL = os.environ.get("MONGO_URL", "your_mongo_url")
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-100xxxx")) 
-LOG_CHANNEL_ID = int(os.environ.get("LOG_CHANNEL_ID", "-100xxxx")) 
-ADMIN_ID = int(os.environ.get("ADMIN_ID", "12345"))
-OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "YourUser")
+API_ID = int(os.environ.get("API_ID", "28186012")) # Apni API ID
+API_HASH = os.environ.get("API_HASH", "ecbdbf51d3c6cdcf9a39ac1e7b1d79b6")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8394919663:AAHZzRgdimPxn-O7PTnNAFgzqkhRoV0ZGiI")
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://northamericaserver075_db_user:LctsIHdZSuiZSMYd@cluster0.rclyoen.mongodb.net/?appName=Cluster0")
+CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003460038293")) # Force Sub Channel
+LOG_CHANNEL_ID = int(os.environ.get("LOG_CHANNEL_ID", "-1003602418876")) # Media Storage Channel
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "2145958203"))
+OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "MRPROFESSOR_00")
 PORT = int(os.environ.get("PORT", 8080)) 
 
 # --- DATABASE SETUP ---
