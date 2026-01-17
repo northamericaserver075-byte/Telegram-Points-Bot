@@ -8,6 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from aiohttp import web
 
 # --- CONFIGURATION ---
+# (Apni details Environment Variables me hi rehne dena, code me change karne ki zarurat nahi)
 API_ID = int(os.environ.get("API_ID", "28186012")) # Apni API ID
 API_HASH = os.environ.get("API_HASH", "ecbdbf51d3c6cdcf9a39ac1e7b1d79b6")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8394919663:AAHZzRgdimPxn-O7PTnNAFgzqkhRoV0ZGiI")
@@ -16,7 +17,8 @@ CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003460038293")) # Force Sub Cha
 LOG_CHANNEL_ID = int(os.environ.get("LOG_CHANNEL_ID", "-1003602418876")) # Media Storage Channel
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "2145958203"))
 OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "MRPROFESSOR_00")
-PORT = int(os.environ.get("PORT", 8080)) # Render ye port dega
+
+PORT = int(os.environ.get("PORT", 8080)) 
 
 # --- DATABASE SETUP ---
 mongo_client = AsyncIOMotorClient(MONGO_URL)
@@ -27,7 +29,7 @@ files_col = db["files"]
 # --- BOT SETUP ---
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# --- WEB SERVER (RENDER KO KHUSH RAKHNE KE LIYE) ---
+# --- WEB SERVER (FIXED) ---
 routes = web.RouteTableDef()
 
 @routes.get("/", allow_head=True)
@@ -79,7 +81,7 @@ async def start_command(client, message):
     referrer_id = int(text[1]) if len(text) > 1 else None
     
     if not await is_subscribed(user_id):
-        join_btn = InlineKeyboardMarkup([[InlineKeyboardButton("📢 Join Channel First", url="https://t.me/YourChannelLink")]])
+        join_btn = InlineKeyboardMarkup([[InlineKeyboardButton("📢 Join Channel First", url="https://t.me/YourChannelLink")]]) # Link replace kar lena agar hardcode karna ho
         await message.reply("⚠️ You must join our channel to use this bot!", reply_markup=join_btn)
         return
 
@@ -156,20 +158,23 @@ async def broadcast(client, message):
         except: pass
     await message.reply("📢 Sent.")
 
-# --- STARTUP LOGIC (Modified for Render) ---
-if __name__ == "__main__":
+# --- NEW STARTUP LOGIC (NO AWAIT ERROR) ---
+async def start_services():
     print("Starting Bot...")
-    app.start() # Start the bot client
+    await app.start()
     print("Bot Started!")
-    
-    # Start the Dummy Web Server
-    app_runner = web.AppRunner(await web_server())
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(app_runner.setup())
-    site = web.TCPSite(app_runner, "0.0.0.0", PORT)
-    loop.run_until_complete(site.start())
-    print(f"Web Server running on port {PORT}")
 
-    # Keep the bot running
-    idle()
-    app.stop()
+    print("Starting Web Server...")
+    app_runner = web.AppRunner(await web_server())
+    await app_runner.setup()
+    bind_address = "0.0.0.0"
+    await web.TCPSite(app_runner, bind_address, PORT).start()
+    print(f"Web Server Running on Port {PORT}")
+
+    await idle()
+    await app.stop()
+
+if __name__ == "__main__":
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_services())
