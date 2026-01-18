@@ -57,7 +57,7 @@ async def init_db():
             
             defaults = {
                 "video_cost": "5", "photo_cost": "2", "referral_bonus": "20", 
-                "buy_link": "https://t.me/", "contact_link": "https://t.me/"
+                "welcome_bonus": "10", "buy_link": "https://t.me/", "contact_link": "https://t.me/"
             }
             for k, v in defaults.items():
                 await conn.execute("INSERT INTO settings (key_name, value) VALUES ($1, $2) ON CONFLICT DO NOTHING", k, v)
@@ -77,8 +77,10 @@ async def get_user(user_id):
     async with DB_POOL.acquire() as conn:
         user = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
         if not user:
-            await conn.execute("INSERT INTO users (user_id, points, referrals) VALUES ($1, 10, 0)", user_id)
-            return {"user_id": user_id, "points": 10, "referrals": 0}
+            # Dynamic Welcome Bonus
+            bonus = int(await get_setting("welcome_bonus"))
+            await conn.execute("INSERT INTO users (user_id, points, referrals) VALUES ($1, $2, 0)", user_id, bonus)
+            return {"user_id": user_id, "points": bonus, "referrals": 0}
         return user
 
 async def update_points(user_id, points):
@@ -92,13 +94,12 @@ async def is_joined(user_id):
     except: pass
     return False
 
-# --- KEYBOARDS (UPDATED) ---
+# --- KEYBOARDS ---
 def main_menu():
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton("🎬 VIDEO"), KeyboardButton("📸 PHOTO")],
             [KeyboardButton("🥇 POINTS"), KeyboardButton("👤 PROFILE")],
-            # NAME CHANGED HERE 👇
             [KeyboardButton("🔗 REFER"), KeyboardButton("💰 GET POINTS")]
         ], resize_keyboard=True
     )
@@ -106,9 +107,10 @@ def main_menu():
 def admin_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 Broadcast", callback_data="adm_cast"), InlineKeyboardButton("📊 Statistics", callback_data="adm_stats")],
-        # PHOTO COST BUTTON ADDED 👇
+        # NEW BUTTONS ADDED HERE 👇
         [InlineKeyboardButton("⚙️ Video Cost", callback_data="set_v"), InlineKeyboardButton("⚙️ Photo Cost", callback_data="set_p")],
-        [InlineKeyboardButton("⚙️ Refer Bonus", callback_data="set_r"), InlineKeyboardButton("➕ Add User Pts", callback_data="adm_add")],
+        [InlineKeyboardButton("⚙️ Refer Bonus", callback_data="set_r"), InlineKeyboardButton("⚙️ Welcome Bonus", callback_data="set_w")],
+        [InlineKeyboardButton("🎁 Gift All Pts", callback_data="adm_all"), InlineKeyboardButton("➕ Add User Pts", callback_data="adm_add")],
         [InlineKeyboardButton("🔗 Buy Link", callback_data="set_l"), InlineKeyboardButton("💬 Contact Link", callback_data="set_c")],
         [InlineKeyboardButton("❌ Close Panel", callback_data="close")]
     ])
@@ -139,7 +141,6 @@ async def start(c, m: Message):
             await m.reply_text("🔒 **Join Channel First!**", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📢 JOIN CHANNEL", url=link)]]))
             return
 
-        # Try sending photo, fallback to text
         caption = f"👋 **Welcome {m.from_user.first_name}!**\n\nUse buttons below to access content."
         try: await m.reply_photo(WELCOME_PIC, caption=caption, reply_markup=main_menu())
         except: await m.reply_text(caption, reply_markup=main_menu())
@@ -154,7 +155,6 @@ async def profile(c, m):
 @bot.on_message(filters.regex("🥇 POINTS"))
 async def points(c, m):
     u = await get_user(m.from_user.id)
-    # MESSAGE CHANGED HERE 👇
     await m.reply_text(f"💰 Balance: **{u['points']}** Points\n\n💡 _Refer or buy now to get more Points!_", quote=True)
 
 @bot.on_message(filters.regex("🔗 REFER"))
@@ -163,7 +163,6 @@ async def refer(c, m):
     bonus = await get_setting("referral_bonus")
     await m.reply_text(f"🔗 **Refer & Earn**\n\nInvite friends & get **+{bonus} Points**!\n\n👇 **Your Link:**\n`{link}`", quote=True)
 
-# REGEX CHANGED HERE 👇
 @bot.on_message(filters.regex("💰 GET POINTS"))
 async def buy(c, m):
     l = await get_setting("buy_link")
@@ -218,26 +217,30 @@ async def admin_callbacks(c, q: CallbackQuery):
         await q.answer(f"📊 Stats:\nUsers: {u}\nFiles: {f}", show_alert=True)
 
     elif data == "adm_cast":
+        await q.message.edit_text("📢 **Broadcast:** Reply to a msg with `/broadcast`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
+
+    # GIFT ALL POINTS (INSTRUCTION)
+    elif data == "adm_all":
         await q.message.edit_text(
-            "📢 **Broadcast Mode**\n\nReply to any message with `/broadcast` to send to all.",
+            "🎁 **Gift Points to ALL Users**\n\n"
+            "Copy & Send this command:\n"
+            "`/add_all 100`\n"
+            "(Replace 100 with amount)",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]])
         )
 
-    # SPECIFIC USER ADD POINTS (Instruction)
+    # WELCOME BONUS SETTING
+    elif data == "set_w":
+        curr = await get_setting("welcome_bonus")
+        await q.message.edit_text(f"⚙️ **Set Welcome Bonus** (Curr: {curr})\nSend: `/set_welcome 10`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
+
     elif data == "adm_add":
-        await q.message.edit_text(
-            "➕ **Add Points to Specific User**\n\n"
-            "Copy & Send this command:\n"
-            "`/add UserID Amount`\n\n"
-            "Example: `/add 123456789 100`",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]])
-        )
+        await q.message.edit_text("➕ **Add User Pts**\nUse: `/add UserID Amount`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
 
     elif data == "set_v":
         curr = await get_setting("video_cost")
         await q.message.edit_text(f"⚙️ **Set Video Cost** (Curr: {curr})\nSend: `/set_video 10`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
 
-    # NEW PHOTO COST BUTTON LOGIC
     elif data == "set_p":
         curr = await get_setting("photo_cost")
         await q.message.edit_text(f"⚙️ **Set Photo Cost** (Curr: {curr})\nSend: `/set_photo 5`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
@@ -270,6 +273,15 @@ async def broadcast(c, m):
             except: pass
     await msg.edit_text(f"✅ Sent to {n} users.")
 
+@bot.on_message(filters.command("add_all") & filters.user(ADMIN_ID))
+async def add_all(c, m):
+    try:
+        amt = int(m.text.split()[1])
+        msg = await m.reply_text(f"⏳ Sending {amt} points to EVERYONE...")
+        async with DB_POOL.acquire() as conn: await conn.execute("UPDATE users SET points = points + $1", amt)
+        await msg.edit_text("✅ Done! Sabko points mil gaye.")
+    except: pass
+
 @bot.on_message(filters.command("add") & filters.user(ADMIN_ID))
 async def add_p(c, m):
     try: _, u, p = m.text.split(); await update_points(int(u), int(p)); await m.reply_text("✅ Added")
@@ -278,6 +290,11 @@ async def add_p(c, m):
 @bot.on_message(filters.command("set_refer") & filters.user(ADMIN_ID))
 async def set_ref(c, m):
     try: await set_setting("referral_bonus", m.text.split()[1]); await m.reply_text("✅ Set")
+    except: pass
+
+@bot.on_message(filters.command("set_welcome") & filters.user(ADMIN_ID))
+async def set_wel(c, m):
+    try: await set_setting("welcome_bonus", m.text.split()[1]); await m.reply_text("✅ Set")
     except: pass
 
 @bot.on_message(filters.command("set_video") & filters.user(ADMIN_ID))
