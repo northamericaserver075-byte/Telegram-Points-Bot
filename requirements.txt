@@ -2,4 +2,3 @@ pyrogram
 tgcrypto
 flask
 asyncpg
-uvloop
