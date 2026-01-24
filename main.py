@@ -41,7 +41,7 @@ def home(): return "Bot is Live!"
 def run_web(): app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 # --- BOT SETUP ---
-bot = Client("final_ultra_max_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+bot = Client("final_ultra_max_pro_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 DB_POOL = None
 
 # --- DATABASE SETUP ---
@@ -109,11 +109,11 @@ def main_menu():
 def admin_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 Broadcast", callback_data="adm_cast"), InlineKeyboardButton("📊 Statistics", callback_data="adm_stats")],
-        [InlineKeyboardButton("⚙️ Set Channel", callback_data="set_ch"), InlineKeyboardButton("🖼️ Set Photo", callback_data="set_pic_help")],
+        # 👇 YE RAHA PHOTO SET KARNE KA BUTTON
+        [InlineKeyboardButton("⚙️ Set Channel", callback_data="set_ch"), InlineKeyboardButton("🖼️ Set Welcome Photo", callback_data="set_pic_help")],
         [InlineKeyboardButton("⚙️ Video Cost", callback_data="set_v"), InlineKeyboardButton("⚙️ Photo Cost", callback_data="set_p")],
         [InlineKeyboardButton("⚙️ Refer Bonus", callback_data="set_r"), InlineKeyboardButton("⚙️ Welcome Bonus", callback_data="set_w")],
         [InlineKeyboardButton("🎁 Gift All Pts", callback_data="adm_all"), InlineKeyboardButton("➕ Add User Pts", callback_data="adm_add")],
-        # FIXED: CONTACT LINK ADDED HERE 👇
         [InlineKeyboardButton("🔗 Buy Link", callback_data="set_l"), InlineKeyboardButton("💬 Contact Link", callback_data="set_c")],
         [InlineKeyboardButton("❌ Close Panel", callback_data="close")]
     ])
@@ -196,7 +196,6 @@ async def refer(c, m):
     bonus = await get_setting("referral_bonus")
     await m.reply_text(f"🔗 **Refer & Earn**\n\nInvite friends & get **+{bonus} Points**!\n\n👇 **Your Link:**\n`{link}`", quote=True)
 
-# FIXED: GET POINTS HANDLER
 @bot.on_message(filters.regex("💰 GET POINTS"))
 async def buy(c, m):
     try:
@@ -259,19 +258,21 @@ async def admin_callbacks(c, q: CallbackQuery):
     elif data == "adm_all": await q.message.edit_text("🎁 Use `/add_all 100`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     elif data == "set_ch": await q.message.edit_text("📢 Use `/set_channel -100xxx`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     
+    # PHOTO SETTING INSTRUCTION
     elif data == "set_pic_help":
-        await q.message.edit_text("🖼️ Send photo -> Reply `/set_photo`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]])
+        await q.message.edit_text(
+            "🖼️ **Set Welcome Photo**\n\n"
+            "1. Send the photo to this bot.\n"
+            "2. Reply to that photo with `/set_photo`.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]])
         )
 
     elif data == "set_v": await q.message.edit_text("⚙️ Use `/set_video 10`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     elif data == "set_p": await q.message.edit_text("⚙️ Use `/set_photo 5`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     elif data == "set_r": await q.message.edit_text("⚙️ Use `/set_refer 50`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     elif data == "set_w": await q.message.edit_text("⚙️ Use `/set_welcome 10`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
-    
     elif data == "adm_add": await q.message.edit_text("➕ Use `/add UserID Amount`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
-
     elif data == "set_l": await q.message.edit_text("🔗 Use `/set_link https://..`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
-    # FIXED: CONTACT LINK CALLBACK
     elif data == "set_c": await q.message.edit_text("💬 Use `/set_contact https://..`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     
     elif data == "back_admin": await q.message.edit_text("👮‍♂️ **Admin Control Panel**", reply_markup=admin_kb())
