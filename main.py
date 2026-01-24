@@ -29,7 +29,7 @@ DATABASE_URL = "postgresql://neondb_owner:npg_wF1j7VkczvPZ@ep-young-darkness-a15
 LOG_CHANNEL_ID = -1003602418876 # Media Channel
 ADMIN_ID = 2145958203       # Apni User ID
 
-# Default Fallback Photo (Agar DB me photo set nahi ki to ye dikhegi)
+# Default Fallback Photo
 DEFAULT_PIC = "https://cdn-icons-png.flaticon.com/512/4712/4712109.png"
 
 # ==========================================
@@ -41,7 +41,7 @@ def home(): return "Bot is Live!"
 def run_web(): app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 # --- BOT SETUP ---
-bot = Client("final_ultra_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+bot = Client("final_ultra_max_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 DB_POOL = None
 
 # --- DATABASE SETUP ---
@@ -58,7 +58,7 @@ async def init_db():
                 "video_cost": "5", "photo_cost": "2", "referral_bonus": "20", 
                 "welcome_bonus": "10", "buy_link": "https://t.me/", 
                 "contact_link": "https://t.me/", "force_channel": "0",
-                "welcome_photo": "0" # Stores File ID
+                "welcome_photo": "0"
             }
             for k, v in defaults.items():
                 await conn.execute("INSERT INTO settings (key_name, value) VALUES ($1, $2) ON CONFLICT DO NOTHING", k, v)
@@ -111,18 +111,18 @@ def admin_kb():
         [InlineKeyboardButton("📢 Broadcast", callback_data="adm_cast"), InlineKeyboardButton("📊 Statistics", callback_data="adm_stats")],
         [InlineKeyboardButton("⚙️ Set Channel", callback_data="set_ch"), InlineKeyboardButton("🖼️ Set Photo", callback_data="set_pic_help")],
         [InlineKeyboardButton("⚙️ Video Cost", callback_data="set_v"), InlineKeyboardButton("⚙️ Photo Cost", callback_data="set_p")],
-        [InlineKeyboardButton("⚙️ Refer Bonus", callback_data="set_r"), InlineKeyboardButton("🎁 Gift All Pts", callback_data="adm_all")],
-        [InlineKeyboardButton("➕ Add User Pts", callback_data="adm_add"), InlineKeyboardButton("🔗 Buy Link", callback_data="set_l")],
+        [InlineKeyboardButton("⚙️ Refer Bonus", callback_data="set_r"), InlineKeyboardButton("⚙️ Welcome Bonus", callback_data="set_w")],
+        [InlineKeyboardButton("🎁 Gift All Pts", callback_data="adm_all"), InlineKeyboardButton("➕ Add User Pts", callback_data="adm_add")],
+        # FIXED: CONTACT LINK ADDED HERE 👇
+        [InlineKeyboardButton("🔗 Buy Link", callback_data="set_l"), InlineKeyboardButton("💬 Contact Link", callback_data="set_c")],
         [InlineKeyboardButton("❌ Close Panel", callback_data="close")]
     ])
 
-# --- MAIN LOGIC (START & JOIN CHECK) ---
+# --- MAIN LOGIC ---
 
 async def send_welcome(c, user_id, first_name):
-    # Fetch Dynamic Photo
     pic_id = await get_setting("welcome_photo")
     caption = f"👋 **Welcome {first_name}!**\n\nUse buttons below to access content."
-    
     try:
         if pic_id and pic_id != "0":
             await c.send_photo(user_id, pic_id, caption=caption, reply_markup=main_menu())
@@ -150,30 +150,24 @@ async def start(c, m: Message):
                             except: pass
             except: pass
 
-        # Force Subscribe Logic
+        # Force Subscribe
         if not await is_joined(user_id):
             channel_id = await get_setting("force_channel")
             try: link = await c.export_chat_invite_link(int(channel_id))
             except: link = "https://t.me/"
             
-            # SHOWING PHOTO EVEN IF NOT JOINED
             pic_id = await get_setting("welcome_photo")
             txt = "🔒 **Access Denied!**\n\nYou must join our channel to use this bot."
             btn = InlineKeyboardMarkup([
                 [InlineKeyboardButton("📢 JOIN CHANNEL", url=link)],
                 [InlineKeyboardButton("✅ I HAVE JOINED", callback_data="check_join")]
             ])
-            
             try:
-                if pic_id and pic_id != "0":
-                    await m.reply_photo(pic_id, caption=txt, reply_markup=btn)
-                else:
-                    await m.reply_photo(DEFAULT_PIC, caption=txt, reply_markup=btn)
-            except:
-                await m.reply_text(txt, reply_markup=btn)
+                if pic_id and pic_id != "0": await m.reply_photo(pic_id, caption=txt, reply_markup=btn)
+                else: await m.reply_photo(DEFAULT_PIC, caption=txt, reply_markup=btn)
+            except: await m.reply_text(txt, reply_markup=btn)
             return
 
-        # If Joined
         await send_welcome(c, user_id, m.from_user.first_name)
     except: pass
 
@@ -202,16 +196,20 @@ async def refer(c, m):
     bonus = await get_setting("referral_bonus")
     await m.reply_text(f"🔗 **Refer & Earn**\n\nInvite friends & get **+{bonus} Points**!\n\n👇 **Your Link:**\n`{link}`", quote=True)
 
+# FIXED: GET POINTS HANDLER
 @bot.on_message(filters.regex("💰 GET POINTS"))
 async def buy(c, m):
-    l = await get_setting("buy_link")
-    cl = await get_setting("contact_link")
-    # CONTACT OWNER BUTTON ADDED BACK 👇
-    btn = InlineKeyboardMarkup([
-        [InlineKeyboardButton("💎 Buy Now", url=l)],
-        [InlineKeyboardButton("👤 Contact Owner", url=cl)]
-    ])
-    await m.reply_text("💎 **Get Points**", reply_markup=btn)
+    try:
+        l = await get_setting("buy_link")
+        cl = await get_setting("contact_link")
+        btn = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💎 Buy Now", url=l)],
+            [InlineKeyboardButton("💬 Contact Owner", url=cl)]
+        ])
+        await m.reply_text("💎 **Get Points**\n\nClick below to purchase or contact support.", reply_markup=btn)
+    except Exception as e:
+        logger.error(f"Buy Button Error: {e}")
+        await m.reply_text("❌ Error fetching links. Contact Admin.")
 
 @bot.on_message(filters.regex("🎬 VIDEO"))
 async def video(c, m):
@@ -240,7 +238,6 @@ async def photo(c, m):
     else: await m.reply_text(f"❌ Need {cost} Points!")
 
 # --- ADMIN PANEL ---
-
 @bot.on_message(filters.command("admin") & filters.user(ADMIN_ID))
 async def admin_cmd(c, m):
     await m.reply_text("👮‍♂️ **Admin Control Panel**", reply_markup=admin_kb())
@@ -262,20 +259,21 @@ async def admin_callbacks(c, q: CallbackQuery):
     elif data == "adm_all": await q.message.edit_text("🎁 Use `/add_all 100`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     elif data == "set_ch": await q.message.edit_text("📢 Use `/set_channel -100xxx`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     
-    # SET PHOTO INSTRUCTION
     elif data == "set_pic_help":
-        await q.message.edit_text(
-            "🖼️ **Set Welcome Photo**\n\n"
-            "1. Send the photo to this bot.\n"
-            "2. Reply to that photo with `/set_photo`.\n\n"
-            "That's it!",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]])
+        await q.message.edit_text("🖼️ Send photo -> Reply `/set_photo`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]])
         )
 
     elif data == "set_v": await q.message.edit_text("⚙️ Use `/set_video 10`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     elif data == "set_p": await q.message.edit_text("⚙️ Use `/set_photo 5`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     elif data == "set_r": await q.message.edit_text("⚙️ Use `/set_refer 50`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
-    elif data == "set_l": await q.message.edit_text("🔗 Use `/set_link https://`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
+    elif data == "set_w": await q.message.edit_text("⚙️ Use `/set_welcome 10`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
+    
+    elif data == "adm_add": await q.message.edit_text("➕ Use `/add UserID Amount`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
+
+    elif data == "set_l": await q.message.edit_text("🔗 Use `/set_link https://..`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
+    # FIXED: CONTACT LINK CALLBACK
+    elif data == "set_c": await q.message.edit_text("💬 Use `/set_contact https://..`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
+    
     elif data == "back_admin": await q.message.edit_text("👮‍♂️ **Admin Control Panel**", reply_markup=admin_kb())
 
 # --- ADMIN COMMANDS ---
@@ -285,8 +283,7 @@ async def set_pic_cmd(c, m):
         fid = m.reply_to_message.photo.file_id
         await set_setting("welcome_photo", fid)
         await m.reply_text("✅ **Welcome Photo Updated!**")
-    else:
-        await m.reply_text("❌ Reply to a photo!")
+    else: await m.reply_text("❌ Reply to a photo!")
 
 @bot.on_message(filters.command("set_channel") & filters.user(ADMIN_ID))
 async def set_chan(c, m):
