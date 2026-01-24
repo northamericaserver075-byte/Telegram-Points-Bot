@@ -28,7 +28,6 @@ DATABASE_URL = "postgresql://neondb_owner:npg_wF1j7VkczvPZ@ep-young-darkness-a15
 
 LOG_CHANNEL_ID = -1003602418876 # Media Channel
 ADMIN_ID = 2145958203       # Apni User ID
-
 # Default Fallback Photo
 DEFAULT_PIC = "https://cdn-icons-png.flaticon.com/512/4712/4712109.png"
 
@@ -58,7 +57,8 @@ async def init_db():
                 "video_cost": "5", "photo_cost": "2", "referral_bonus": "20", 
                 "welcome_bonus": "10", "buy_link": "https://t.me/", 
                 "contact_link": "https://t.me/", "force_channel": "0",
-                "welcome_photo": "0"
+                "welcome_photo": "0",
+                "welcome_msg": "👋 **Welcome {name}!**\n\nUse buttons below to access content."
             }
             for k, v in defaults.items():
                 await conn.execute("INSERT INTO settings (key_name, value) VALUES ($1, $2) ON CONFLICT DO NOTHING", k, v)
@@ -109,20 +109,24 @@ def main_menu():
 def admin_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 Broadcast", callback_data="adm_cast"), InlineKeyboardButton("📊 Statistics", callback_data="adm_stats")],
-        # 👇 YE RAHA PHOTO SET KARNE KA BUTTON
-        [InlineKeyboardButton("⚙️ Set Channel", callback_data="set_ch"), InlineKeyboardButton("🖼️ Set Welcome Photo", callback_data="set_pic_help")],
+        # NEW BUTTON: SET WELCOME MSG 👇
+        [InlineKeyboardButton("🖼️ Set Photo", callback_data="set_pic_help"), InlineKeyboardButton("📝 Set Welcome Msg", callback_data="set_msg_help")],
+        [InlineKeyboardButton("⚙️ Set Channel", callback_data="set_ch"), InlineKeyboardButton("⚙️ Welcome Bonus", callback_data="set_w")],
         [InlineKeyboardButton("⚙️ Video Cost", callback_data="set_v"), InlineKeyboardButton("⚙️ Photo Cost", callback_data="set_p")],
-        [InlineKeyboardButton("⚙️ Refer Bonus", callback_data="set_r"), InlineKeyboardButton("⚙️ Welcome Bonus", callback_data="set_w")],
-        [InlineKeyboardButton("🎁 Gift All Pts", callback_data="adm_all"), InlineKeyboardButton("➕ Add User Pts", callback_data="adm_add")],
-        [InlineKeyboardButton("🔗 Buy Link", callback_data="set_l"), InlineKeyboardButton("💬 Contact Link", callback_data="set_c")],
-        [InlineKeyboardButton("❌ Close Panel", callback_data="close")]
+        [InlineKeyboardButton("⚙️ Refer Bonus", callback_data="set_r"), InlineKeyboardButton("🎁 Gift All Pts", callback_data="adm_all")],
+        [InlineKeyboardButton("➕ Add User Pts", callback_data="adm_add"), InlineKeyboardButton("🔗 Buy Link", callback_data="set_l")],
+        [InlineKeyboardButton("💬 Contact Link", callback_data="set_c"), InlineKeyboardButton("❌ Close Panel", callback_data="close")]
     ])
 
 # --- MAIN LOGIC ---
 
 async def send_welcome(c, user_id, first_name):
     pic_id = await get_setting("welcome_photo")
-    caption = f"👋 **Welcome {first_name}!**\n\nUse buttons below to access content."
+    raw_msg = await get_setting("welcome_msg")
+    
+    # Replace {name} with actual name
+    caption = raw_msg.replace("{name}", first_name)
+    
     try:
         if pic_id and pic_id != "0":
             await c.send_photo(user_id, pic_id, caption=caption, reply_markup=main_menu())
@@ -266,6 +270,16 @@ async def admin_callbacks(c, q: CallbackQuery):
             "2. Reply to that photo with `/set_photo`.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]])
         )
+    
+    # NEW: MSG SETTING INSTRUCTION
+    elif data == "set_msg_help":
+        await q.message.edit_text(
+            "📝 **Set Welcome Message**\n\n"
+            "Send command like this:\n"
+            "`/set_msg Hello {name}, welcome to my bot!`\n\n"
+            "(`{name}` will show user's name)",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]])
+        )
 
     elif data == "set_v": await q.message.edit_text("⚙️ Use `/set_video 10`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
     elif data == "set_p": await q.message.edit_text("⚙️ Use `/set_photo 5`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_admin")]]))
@@ -285,6 +299,15 @@ async def set_pic_cmd(c, m):
         await set_setting("welcome_photo", fid)
         await m.reply_text("✅ **Welcome Photo Updated!**")
     else: await m.reply_text("❌ Reply to a photo!")
+
+@bot.on_message(filters.command("set_msg") & filters.user(ADMIN_ID))
+async def set_msg_cmd(c, m):
+    if len(m.text.split()) > 1:
+        new_msg = m.text.split(maxsplit=1)[1]
+        await set_setting("welcome_msg", new_msg)
+        await m.reply_text("✅ **Welcome Message Updated!**")
+    else:
+        await m.reply_text("❌ Write message also!\nEx: `/set_msg Hi {name}`")
 
 @bot.on_message(filters.command("set_channel") & filters.user(ADMIN_ID))
 async def set_chan(c, m):
